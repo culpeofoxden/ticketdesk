@@ -15,6 +15,46 @@ Services:
 - Swagger UI: http://localhost:8000/docs
 - PostgreSQL: `localhost:5432`
 
+## Dev Commands
+
+Windows PowerShell:
+
+```powershell
+.\scripts\dev.ps1 up
+.\scripts\dev.ps1 ps
+.\scripts\dev.ps1 smoke
+.\scripts\dev.ps1 logs
+.\scripts\dev.ps1 down
+```
+
+Linux or AWS server shell:
+
+```bash
+sh scripts/dev.sh up
+sh scripts/dev.sh ps
+sh scripts/dev.sh smoke
+sh scripts/dev.sh logs
+sh scripts/dev.sh down
+```
+
+Useful commands:
+
+- `up`: build and start the full stack in the background.
+- `down`: stop the full stack.
+- `restart`: rebuild and restart the full stack.
+- `ps`: show service status.
+- `logs`: show recent logs for every service.
+- `backend-logs`, `frontend-logs`, `db-logs`: show service-specific logs.
+- `build-frontend`: run the Vite production build inside the frontend container.
+- `smoke`: verify frontend HTTP, backend `/health`, demo login, `/auth/me`, and `/tickets`.
+
+The smoke script defaults to `http://localhost:8000` and `http://localhost:5173`.
+For a server deployment, override URLs with environment variables:
+
+```bash
+API_URL=http://your-api-host:8000 FRONTEND_URL=http://your-app-host:5173 sh scripts/smoke.sh
+```
+
 ## Demo Users
 
 The backend seeds these users at startup if they do not exist:
@@ -139,4 +179,3 @@ README.md
 - `POST /auth/register`
 - `POST /auth/login`
 - `GET /auth/me`
-
