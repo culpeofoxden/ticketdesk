@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.enums import TicketPriority, TicketStatus
 from app.schemas.user import UserRead
@@ -38,6 +38,8 @@ class HistoryRead(BaseModel):
     field: str
     old_value: str | None
     new_value: str | None
+    event_type: str | None
+    event_metadata: dict | None
     created_at: datetime
     actor: UserRead | None
 
@@ -52,6 +54,13 @@ class TicketRead(BaseModel):
     priority: TicketPriority
     created_at: datetime
     updated_at: datetime
+    requester_email: EmailStr | None
+    company: str | None
+    store: str | None
+    first_response_due_at: datetime | None
+    resolution_due_at: datetime | None
+    first_response_at: datetime | None
+    solved_at: datetime | None
     customer: UserRead
     assignee: UserRead | None
 
@@ -62,3 +71,16 @@ class TicketDetail(TicketRead):
     comments: list[CommentRead] = []
     history: list[HistoryRead] = []
 
+
+class SupportSubmissionCreate(BaseModel):
+    email: EmailStr
+    company: str = Field(min_length=1, max_length=255)
+    store: str = Field(min_length=1, max_length=255)
+    subject: str = Field(min_length=3, max_length=255)
+    description: str = Field(min_length=3)
+
+
+class SupportSubmissionResponse(BaseModel):
+    ticket_id: int
+    status: TicketStatus
+    message: str

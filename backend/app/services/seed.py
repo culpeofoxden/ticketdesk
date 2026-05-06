@@ -17,6 +17,6 @@ def seed_demo_data(db: Session) -> None:
         existing_user = db.scalar(select(User).where(User.email == email))
         if existing_user:
             continue
-        db.add(User(email=email, full_name=full_name, role=role, password_hash=hash_password("password")))
+        db.add(User(email=email, full_name=full_name, role=role, password_hash=hash_password("password"), is_active=True))
 
     db.commit()

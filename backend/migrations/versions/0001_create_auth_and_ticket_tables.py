@@ -36,6 +36,7 @@ def upgrade() -> None:
         sa.Column("full_name", sa.String(length=255), nullable=False),
         sa.Column("role", user_role, nullable=False),
         sa.Column("password_hash", sa.String(length=255), nullable=False),
+        sa.Column("is_active", sa.Boolean(), server_default=sa.true(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.PrimaryKeyConstraint("id"),
     )
@@ -51,6 +52,13 @@ def upgrade() -> None:
         sa.Column("priority", ticket_priority, nullable=False),
         sa.Column("customer_id", sa.Integer(), nullable=False),
         sa.Column("assignee_id", sa.Integer(), nullable=True),
+        sa.Column("requester_email", sa.String(length=255), nullable=True),
+        sa.Column("company", sa.String(length=255), nullable=True),
+        sa.Column("store", sa.String(length=255), nullable=True),
+        sa.Column("first_response_due_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("resolution_due_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("first_response_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("solved_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(["assignee_id"], ["users.id"]),
@@ -60,6 +68,7 @@ def upgrade() -> None:
     op.create_index(op.f("ix_tickets_assignee_id"), "tickets", ["assignee_id"], unique=False)
     op.create_index(op.f("ix_tickets_id"), "tickets", ["id"], unique=False)
     op.create_index(op.f("ix_tickets_priority"), "tickets", ["priority"], unique=False)
+    op.create_index(op.f("ix_tickets_requester_email"), "tickets", ["requester_email"], unique=False)
     op.create_index(op.f("ix_tickets_status"), "tickets", ["status"], unique=False)
     op.create_index(op.f("ix_tickets_subject"), "tickets", ["subject"], unique=False)
 
@@ -85,12 +94,15 @@ def upgrade() -> None:
         sa.Column("field", sa.String(length=100), nullable=False),
         sa.Column("old_value", sa.String(length=255), nullable=True),
         sa.Column("new_value", sa.String(length=255), nullable=True),
+        sa.Column("event_type", sa.String(length=100), nullable=True),
+        sa.Column("event_metadata", sa.JSON(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.ForeignKeyConstraint(["actor_id"], ["users.id"]),
         sa.ForeignKeyConstraint(["ticket_id"], ["tickets.id"]),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(op.f("ix_ticket_history_id"), "ticket_history", ["id"], unique=False)
+    op.create_index(op.f("ix_ticket_history_event_type"), "ticket_history", ["event_type"], unique=False)
     op.create_index(op.f("ix_ticket_history_ticket_id"), "ticket_history", ["ticket_id"], unique=False)
 
 

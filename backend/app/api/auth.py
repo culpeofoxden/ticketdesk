@@ -22,7 +22,15 @@ def token_response(user: User) -> TokenResponse:
 def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> TokenResponse:
     existing_user = db.scalar(select(User).where(User.email == payload.email))
     if existing_user:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+        if existing_user.password_hash:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already registered")
+        existing_user.full_name = payload.full_name or existing_user.full_name or payload.email.split("@")[0]
+        existing_user.role = payload.role
+        existing_user.password_hash = hash_password(payload.password)
+        existing_user.is_active = True
+        db.commit()
+        db.refresh(existing_user)
+        return token_response(existing_user)
 
     user = User(
         email=payload.email,
@@ -39,8 +47,10 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)) -> TokenRe
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     user = db.scalar(select(User).where(User.email == payload.email))
-    if not user or not verify_password(payload.password, user.password_hash):
+    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
+    if not user.is_active:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User is inactive")
     return token_response(user)
 
 

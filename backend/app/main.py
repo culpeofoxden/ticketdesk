@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import auth, tickets, users
+from app.api import auth, support_submissions, tickets, users
 from app.core.config import settings
 from app.db.session import Base, engine, SessionLocal
 from app.services.seed import seed_demo_data
@@ -33,5 +33,6 @@ def health() -> dict[str, str]:
 
 
 app.include_router(auth.router)
+app.include_router(support_submissions.router)
 app.include_router(users.router)
 app.include_router(tickets.router)
