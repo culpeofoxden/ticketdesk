@@ -1,6 +1,7 @@
 from collections.abc import Callable
 
 from app.models.ticket import Ticket, TicketDiagnostic
+from app.services.connectors.robustel import FakeRobustelClient, evaluate_signal
 
 
 PASSWORD_KEYWORDS = ("password", "login", "log in", "sign in", "signin", "locked", "mfa", "reset")
@@ -94,16 +95,24 @@ def check_camera_status(ticket: Ticket, intent: str, playbook: str) -> TicketDia
 
 
 def check_robustel_status(ticket: Ticket, intent: str, playbook: str) -> TicketDiagnostic:
+    snapshot = FakeRobustelClient().get_snapshot(ticket.store)
+    status, severity, summary = evaluate_signal(snapshot)
     return make_diagnostic(
         ticket,
         intent,
         playbook,
         "robustel_router_status",
         "robustel",
-        "needs_review",
-        "warning",
-        "Mock Robustel router check queued. Real connector should read router, SIM, and signal state.",
-        {"store": ticket.store, "mock": True, "next_connector": "robustel_client.router_status"},
+        status,
+        severity,
+        summary,
+        {
+            "store": ticket.store,
+            "mock": True,
+            "next_connector": "robustel_client.snapshot",
+            "request_examples": ["cli> status cellular", "cli> speedtest 10", "SIM info", "SIM operator"],
+            "snapshot": snapshot.to_dict(),
+        },
     )
 
 
