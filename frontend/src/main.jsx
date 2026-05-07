@@ -289,6 +289,47 @@ function DiagnosticsPanel({ diagnostics, loading, error, onRun }) {
   );
 }
 
+function ConversationTimeline({ ticket }) {
+  const events = [
+    {
+      id: "description",
+      author: ticket.customer?.full_name || ticket.requester_email || "Requester",
+      body: ticket.description,
+      created_at: ticket.created_at,
+      tone: "requester"
+    },
+    ...ticket.comments.map((item) => ({
+      id: item.id,
+      author: item.author.full_name,
+      body: item.body,
+      created_at: item.created_at,
+      tone: item.author.role === "customer" ? "requester" : "agent"
+    }))
+  ];
+
+  return (
+    <div className="space-y-4">
+      {events.map((item) => (
+        <article key={item.id} className={`rounded border p-4 ${item.tone === "agent" ? "border-teal-200 bg-teal-50" : "border-slate-200 bg-white"}`}>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${item.tone === "agent" ? "bg-teal-600 text-white" : "bg-slate-200 text-slate-700"}`}>
+                {item.author.slice(0, 1).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="truncate font-medium text-slate-900">{item.author}</p>
+                <p className="text-xs text-slate-500">{formatDateTime(item.created_at)}</p>
+              </div>
+            </div>
+            <Badge tone={item.tone === "agent" ? "agent" : "customer"}>{item.tone === "agent" ? "reply" : "request"}</Badge>
+          </div>
+          <p className="whitespace-pre-wrap text-sm leading-6 text-slate-700">{item.body}</p>
+        </article>
+      ))}
+    </div>
+  );
+}
+
 function TicketDetail({ token, user, ticket, agents, diagnostics, diagnosticsLoading, diagnosticsError, onRunDiagnostics, onRefresh }) {
   const [comment, setComment] = useState("");
   const canManage = user.role === "admin" || user.role === "agent";
@@ -316,112 +357,131 @@ function TicketDetail({ token, user, ticket, agents, diagnostics, diagnosticsLoa
   }
 
   return (
-    <section className="space-y-5">
-      <div className="rounded bg-white p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-semibold text-slate-900">#{ticket.id} {ticket.subject}</h2>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-slate-600">{ticket.description}</p>
-            {(ticket.requester_email || ticket.company || ticket.store) && (
-              <div className="mt-4 grid gap-3 rounded border border-slate-200 bg-slate-50 p-3 text-sm md:grid-cols-3">
-                <div>
-                  <p className="text-xs font-medium uppercase text-slate-500">Requester email</p>
-                  <p className="mt-1 text-slate-800">{ticket.requester_email || "Not provided"}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium uppercase text-slate-500">Company</p>
-                  <p className="mt-1 text-slate-800">{ticket.company || "Not provided"}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-medium uppercase text-slate-500">Store</p>
-                  <p className="mt-1 text-slate-800">{ticket.store || "Not provided"}</p>
-                </div>
+    <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="min-w-0 space-y-5">
+        <div className="rounded bg-white shadow-sm">
+          <div className="border-b border-slate-200 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-medium uppercase text-slate-500">Ticket #{ticket.id}</p>
+                <h2 className="mt-1 text-xl font-semibold text-slate-900">{ticket.subject}</h2>
               </div>
-            )}
-            <div className="mt-4 grid gap-3 rounded border border-slate-200 bg-white p-3 text-sm md:grid-cols-4">
-              <div>
-                <p className="text-xs font-medium uppercase text-slate-500">First response due</p>
-                <p className="mt-1 text-slate-800">{formatDateTime(ticket.first_response_due_at)}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase text-slate-500">First response at</p>
-                <p className="mt-1 text-slate-800">{formatDateTime(ticket.first_response_at)}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase text-slate-500">Resolution due</p>
-                <p className="mt-1 text-slate-800">{formatDateTime(ticket.resolution_due_at)}</p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase text-slate-500">Solved at</p>
-                <p className="mt-1 text-slate-800">{formatDateTime(ticket.solved_at)}</p>
+              <div className="flex shrink-0 gap-2">
+                <Badge tone={ticket.status}>{ticket.status}</Badge>
+                <Badge tone={ticket.priority}>{ticket.priority}</Badge>
               </div>
             </div>
           </div>
-          <div className="flex gap-2">
-            <Badge tone={ticket.status}>{ticket.status}</Badge>
-            <Badge tone={ticket.priority}>{ticket.priority}</Badge>
+          <div className="max-h-[58vh] overflow-y-auto bg-slate-50 p-5">
+            <ConversationTimeline ticket={ticket} />
+          </div>
+          <form className="border-t border-slate-200 bg-white p-4" onSubmit={addComment}>
+            <div className="mb-3 inline-flex rounded border border-slate-200 bg-slate-50 p-1">
+              <button type="button" className="rounded bg-white px-3 py-1.5 text-sm font-medium text-slate-900 shadow-sm">Public reply</button>
+              <button type="button" className="rounded px-3 py-1.5 text-sm text-slate-500">Internal note</button>
+            </div>
+            <textarea className="input min-h-28" placeholder="Write a reply" value={comment} onChange={(e) => setComment(e.target.value)} />
+            <div className="mt-3 flex justify-end">
+              <button className="btn-primary inline-flex items-center gap-2" type="submit"><MessageSquarePlus className="h-4 w-4" /> Send reply</button>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <aside className="space-y-5">
+        <div className="rounded bg-white p-5 shadow-sm">
+          <h3 className="mb-4 font-semibold text-slate-900">Ticket fields</h3>
+          <div className="space-y-3">
+            <label className="field">
+              <span>Status</span>
+              <select className="input" value={ticket.status} disabled={!visibleStatuses.length} onChange={(e) => patchTicket({ status: e.target.value })}>
+                {visibleStatuses.includes(ticket.status) ? null : <option value={ticket.status}>{ticket.status}</option>}
+                {visibleStatuses.map((status) => <option key={status}>{status}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>Priority</span>
+              <select className="input" value={ticket.priority} onChange={(e) => patchTicket({ priority: e.target.value })}>
+                {priorities.map((priority) => <option key={priority}>{priority}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>Assigned agent</span>
+              <select className="input" value={ticket.assignee?.id || ""} disabled={!canManage} onChange={(e) => patchTicket({ assignee_id: e.target.value ? Number(e.target.value) : null })}>
+                <option value="">Unassigned</option>
+                {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.full_name}</option>)}
+              </select>
+            </label>
           </div>
         </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <label className="field">
-            <span>Status</span>
-            <select className="input" value={ticket.status} disabled={!visibleStatuses.length} onChange={(e) => patchTicket({ status: e.target.value })}>
-              {visibleStatuses.includes(ticket.status) ? null : <option value={ticket.status}>{ticket.status}</option>}
-              {visibleStatuses.map((status) => <option key={status}>{status}</option>)}
-            </select>
-          </label>
-          <label className="field">
-            <span>Priority</span>
-            <select className="input" value={ticket.priority} onChange={(e) => patchTicket({ priority: e.target.value })}>
-              {priorities.map((priority) => <option key={priority}>{priority}</option>)}
-            </select>
-          </label>
-          <label className="field">
-            <span>Assigned agent</span>
-            <select className="input" value={ticket.assignee?.id || ""} disabled={!canManage} onChange={(e) => patchTicket({ assignee_id: e.target.value ? Number(e.target.value) : null })}>
-              <option value="">Unassigned</option>
-              {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.full_name}</option>)}
-            </select>
-          </label>
-        </div>
-      </div>
 
-      {canManage && (
-        <DiagnosticsPanel
-          diagnostics={diagnostics}
-          loading={diagnosticsLoading}
-          error={diagnosticsError}
-          onRun={() => onRunDiagnostics(ticket.id)}
-        />
-      )}
-
-      <div className="rounded bg-white p-5 shadow-sm">
-        <h3 className="mb-3 font-semibold text-slate-900">Comments</h3>
-        <div className="space-y-3">
-          {ticket.comments.map((item) => (
-            <div key={item.id} className="rounded border border-slate-200 p-3">
-              <p className="text-sm text-slate-800">{item.body}</p>
-              <p className="mt-2 text-xs text-slate-500">{item.author.full_name} - {new Date(item.created_at).toLocaleString()}</p>
+        <div className="rounded bg-white p-5 shadow-sm">
+          <h3 className="mb-4 font-semibold text-slate-900">Requester context</h3>
+          <div className="space-y-3 text-sm">
+            <div>
+              <p className="text-xs font-medium uppercase text-slate-500">Requester</p>
+              <p className="mt-1 text-slate-800">{ticket.customer?.full_name || ticket.requester_email || "Guest requester"}</p>
             </div>
-          ))}
-        </div>
-        <form className="mt-4 flex gap-2" onSubmit={addComment}>
-          <input className="input" placeholder="Add comment" value={comment} onChange={(e) => setComment(e.target.value)} />
-          <button className="btn-primary inline-flex items-center gap-2" type="submit"><MessageSquarePlus className="h-4 w-4" /> Add</button>
-        </form>
-      </div>
-
-      <div className="rounded bg-white p-5 shadow-sm">
-        <h3 className="mb-3 font-semibold text-slate-900">History</h3>
-        <div className="space-y-2">
-          {ticket.history.map((item) => (
-            <div key={item.id} className="text-sm text-slate-600">
-              <span className="font-medium text-slate-800">{item.actor?.full_name || "System"}</span> {historyText(item)}
-              <span className="text-slate-400"> - {new Date(item.created_at).toLocaleString()}</span>
+            <div>
+              <p className="text-xs font-medium uppercase text-slate-500">Email</p>
+              <p className="mt-1 break-all text-slate-800">{ticket.requester_email || ticket.customer?.email || "Not provided"}</p>
             </div>
-          ))}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase text-slate-500">Company</p>
+                <p className="mt-1 text-slate-800">{ticket.company || "Not provided"}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase text-slate-500">Store</p>
+                <p className="mt-1 text-slate-800">{ticket.store || "Not provided"}</p>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
+
+        <div className="rounded bg-white p-5 shadow-sm">
+          <h3 className="mb-4 font-semibold text-slate-900">SLA</h3>
+          <div className="space-y-3 text-sm">
+            <div>
+              <p className="text-xs font-medium uppercase text-slate-500">First response due</p>
+              <p className="mt-1 text-slate-800">{formatDateTime(ticket.first_response_due_at)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase text-slate-500">First response at</p>
+              <p className="mt-1 text-slate-800">{formatDateTime(ticket.first_response_at)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase text-slate-500">Resolution due</p>
+              <p className="mt-1 text-slate-800">{formatDateTime(ticket.resolution_due_at)}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase text-slate-500">Solved at</p>
+              <p className="mt-1 text-slate-800">{formatDateTime(ticket.solved_at)}</p>
+            </div>
+          </div>
+        </div>
+
+        {canManage && (
+          <DiagnosticsPanel
+            diagnostics={diagnostics}
+            loading={diagnosticsLoading}
+            error={diagnosticsError}
+            onRun={() => onRunDiagnostics(ticket.id)}
+          />
+        )}
+
+        <div className="rounded bg-white p-5 shadow-sm">
+          <h3 className="mb-3 font-semibold text-slate-900">History</h3>
+          <div className="space-y-3">
+            {ticket.history.slice(0, 8).map((item) => (
+              <div key={item.id} className="border-l-2 border-slate-200 pl-3 text-sm text-slate-600">
+                <p><span className="font-medium text-slate-800">{item.actor?.full_name || "System"}</span> {historyText(item)}</p>
+                <p className="mt-1 text-xs text-slate-400">{new Date(item.created_at).toLocaleString()}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </aside>
     </section>
   );
 }
