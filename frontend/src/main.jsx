@@ -53,7 +53,13 @@ function Badge({ children, tone = "gray" }) {
     agent: "bg-cyan-50 text-cyan-700",
     customer: "bg-stone-100 text-stone-700",
     active: "bg-emerald-50 text-emerald-700",
-    inactive: "bg-rose-50 text-rose-700"
+    inactive: "bg-rose-50 text-rose-700",
+    info: "bg-sky-50 text-sky-700",
+    warning: "bg-amber-50 text-amber-700",
+    critical: "bg-red-50 text-red-700",
+    ok: "bg-emerald-50 text-emerald-700",
+    needs_review: "bg-amber-50 text-amber-700",
+    needs_info: "bg-orange-50 text-orange-700"
   };
   return <span className={`rounded px-2 py-1 text-xs font-medium ${tones[tone] || tones.gray}`}>{children}</span>;
 }
@@ -235,7 +241,55 @@ function TicketList({ tickets, selectedId, onSelect }) {
   );
 }
 
-function TicketDetail({ token, user, ticket, agents, onRefresh }) {
+function DiagnosticsPanel({ diagnostics, loading, error, onRun }) {
+  const latest = diagnostics[0];
+  const intent = latest?.intent || "not_classified";
+  const playbook = latest?.playbook || "not_run";
+
+  return (
+    <div className="rounded bg-white p-5 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-semibold text-slate-900">Diagnostics</h3>
+          <p className="mt-1 text-sm text-slate-500">Intent: {intent} - Playbook: {playbook}</p>
+        </div>
+        <button className="btn-secondary inline-flex items-center gap-2" onClick={onRun} disabled={loading}>
+          <RefreshCcw className="h-4 w-4" /> Run checks
+        </button>
+      </div>
+      {error && <p className="mb-3 rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {loading ? (
+        <div className="rounded border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">Running diagnostics...</div>
+      ) : diagnostics.length ? (
+        <div className="space-y-2">
+          {diagnostics.map((item) => (
+            <div key={item.id} className="rounded border border-slate-200 p-3">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium text-slate-900">{item.check_name}</p>
+                  <p className="mt-1 text-sm text-slate-600">{item.summary}</p>
+                </div>
+                <div className="flex shrink-0 gap-2">
+                  <Badge tone={item.status}>{item.status}</Badge>
+                  <Badge tone={item.severity}>{item.severity}</Badge>
+                </div>
+              </div>
+              <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+                <span>Service: {item.service}</span>
+                <span>Checked: {formatDateTime(item.checked_at)}</span>
+                {item.details?.next_connector && <span>Next: {item.details.next_connector}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="rounded border border-dashed border-slate-300 p-6 text-center text-sm text-slate-500">No diagnostics available for this ticket.</div>
+      )}
+    </div>
+  );
+}
+
+function TicketDetail({ token, user, ticket, agents, diagnostics, diagnosticsLoading, diagnosticsError, onRunDiagnostics, onRefresh }) {
   const [comment, setComment] = useState("");
   const canManage = user.role === "admin" || user.role === "agent";
   const visibleStatuses = statusOptionsByRole[user.role] || [];
@@ -332,13 +386,22 @@ function TicketDetail({ token, user, ticket, agents, onRefresh }) {
         </div>
       </div>
 
+      {canManage && (
+        <DiagnosticsPanel
+          diagnostics={diagnostics}
+          loading={diagnosticsLoading}
+          error={diagnosticsError}
+          onRun={() => onRunDiagnostics(ticket.id)}
+        />
+      )}
+
       <div className="rounded bg-white p-5 shadow-sm">
         <h3 className="mb-3 font-semibold text-slate-900">Comments</h3>
         <div className="space-y-3">
           {ticket.comments.map((item) => (
             <div key={item.id} className="rounded border border-slate-200 p-3">
               <p className="text-sm text-slate-800">{item.body}</p>
-              <p className="mt-2 text-xs text-slate-500">{item.author.full_name} · {new Date(item.created_at).toLocaleString()}</p>
+              <p className="mt-2 text-xs text-slate-500">{item.author.full_name} - {new Date(item.created_at).toLocaleString()}</p>
             </div>
           ))}
         </div>
@@ -549,6 +612,9 @@ function AppView({ auth, onLogout }) {
   const [agents, setAgents] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
+  const [diagnostics, setDiagnostics] = useState([]);
+  const [diagnosticsLoading, setDiagnosticsLoading] = useState(false);
+  const [diagnosticsError, setDiagnosticsError] = useState("");
   const [filters, setFilters] = useState({ queue: "", status: "", priority: "", assignee_id: "" });
   const [error, setError] = useState("");
 
@@ -569,6 +635,7 @@ function AppView({ auth, onLogout }) {
         await loadDetail(id);
       } else {
         setDetail(null);
+        setDiagnostics([]);
       }
     } catch (err) {
       setError(err.message);
@@ -576,8 +643,42 @@ function AppView({ auth, onLogout }) {
   }
 
   async function loadDetail(id) {
+    setDiagnostics([]);
     const data = await request(`/tickets/${id}`, { headers: authHeaders(auth.access_token) });
     setDetail(data);
+    if (auth.user.role !== "customer") {
+      await loadDiagnostics(id);
+    }
+  }
+
+  async function loadDiagnostics(id) {
+    setDiagnosticsLoading(true);
+    setDiagnosticsError("");
+    try {
+      const data = await request(`/tickets/${id}/diagnostics`, { headers: authHeaders(auth.access_token) });
+      setDiagnostics(data);
+    } catch (err) {
+      setDiagnosticsError(err.message);
+    } finally {
+      setDiagnosticsLoading(false);
+    }
+  }
+
+  async function runDiagnostics(id) {
+    setDiagnosticsLoading(true);
+    setDiagnosticsError("");
+    try {
+      const data = await request(`/tickets/${id}/diagnostics/run`, {
+        method: "POST",
+        headers: authHeaders(auth.access_token)
+      });
+      setDiagnostics(data);
+      await loadTickets(id);
+    } catch (err) {
+      setDiagnosticsError(err.message);
+    } finally {
+      setDiagnosticsLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -646,7 +747,7 @@ function AppView({ auth, onLogout }) {
               </select>
             </div>
             {error && <p className="mb-3 rounded bg-red-50 p-3 text-sm text-red-700">{error}</p>}
-            <TicketList tickets={tickets} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); loadDetail(id); }} />
+            <TicketList tickets={tickets} selectedId={selectedId} onSelect={(id) => { setSelectedId(id); setDiagnostics([]); loadDetail(id); }} />
           </div>
 
           <div className="rounded bg-white p-5 shadow-sm">
@@ -656,7 +757,17 @@ function AppView({ auth, onLogout }) {
         </aside>
 
         {detail ? (
-          <TicketDetail token={auth.access_token} user={auth.user} ticket={detail} agents={agents} onRefresh={(id) => loadTickets(id)} />
+          <TicketDetail
+            token={auth.access_token}
+            user={auth.user}
+            ticket={detail}
+            agents={agents}
+            diagnostics={diagnostics}
+            diagnosticsLoading={diagnosticsLoading}
+            diagnosticsError={diagnosticsError}
+            onRunDiagnostics={runDiagnostics}
+            onRefresh={(id) => loadTickets(id)}
+          />
         ) : (
           <section className="rounded bg-white p-10 text-center text-slate-500 shadow-sm">Select or create a ticket.</section>
         )}

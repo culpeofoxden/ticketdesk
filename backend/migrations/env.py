@@ -5,7 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import settings
 from app.db.session import Base
-from app.models import Ticket, TicketComment, TicketHistory, User
+from app.models import Ticket, TicketComment, TicketDiagnostic, TicketHistory, User
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)
@@ -46,4 +46,3 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     run_migrations_online()
-

@@ -31,6 +31,7 @@ class Ticket(Base):
     assignee = relationship("User", back_populates="assigned_tickets", foreign_keys=[assignee_id])
     comments = relationship("TicketComment", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketComment.created_at")
     history = relationship("TicketHistory", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketHistory.created_at.desc()")
+    diagnostics = relationship("TicketDiagnostic", back_populates="ticket", cascade="all, delete-orphan", order_by="TicketDiagnostic.checked_at.desc()")
 
 
 class TicketComment(Base):
@@ -61,3 +62,21 @@ class TicketHistory(Base):
 
     ticket = relationship("Ticket", back_populates="history")
     actor = relationship("User")
+
+
+class TicketDiagnostic(Base):
+    __tablename__ = "ticket_diagnostics"
+
+    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    ticket_id: Mapped[int] = mapped_column(ForeignKey("tickets.id"), index=True)
+    intent: Mapped[str] = mapped_column(String(100), index=True)
+    playbook: Mapped[str] = mapped_column(String(100), index=True)
+    check_name: Mapped[str] = mapped_column(String(100), index=True)
+    service: Mapped[str] = mapped_column(String(100))
+    status: Mapped[str] = mapped_column(String(32), index=True)
+    severity: Mapped[str] = mapped_column(String(32), index=True)
+    summary: Mapped[str] = mapped_column(Text)
+    details: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    checked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+    ticket = relationship("Ticket", back_populates="diagnostics")

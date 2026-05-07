@@ -46,6 +46,21 @@ class HistoryRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DiagnosticRead(BaseModel):
+    id: int
+    intent: str
+    playbook: str
+    check_name: str
+    service: str
+    status: str
+    severity: str
+    summary: str
+    details: dict | None
+    checked_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class TicketRead(BaseModel):
     id: int
     subject: str

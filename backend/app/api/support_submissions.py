@@ -8,6 +8,7 @@ from app.models.enums import TicketPriority, TicketStatus, UserRole
 from app.models.ticket import Ticket
 from app.models.user import User
 from app.schemas.ticket import SupportSubmissionCreate, SupportSubmissionResponse
+from app.services.diagnostics import run_ticket_diagnostics
 from app.services.lifecycle import add_history, apply_initial_sla
 
 router = APIRouter(prefix="/support-submissions", tags=["support submissions"])
@@ -47,5 +48,8 @@ def create_support_submission(payload: SupportSubmissionCreate, db: Session = De
     db.add(ticket)
     db.flush()
     db.add(add_history(ticket, None, "created", None, "support submission", "created", {"source": "support_form"}))
+    for diagnostic in run_ticket_diagnostics(ticket):
+        db.add(diagnostic)
+    db.add(add_history(ticket, None, "diagnostics", None, "run", "diagnostics_run", {"trigger": "support_submission"}))
     db.commit()
     return SupportSubmissionResponse(ticket_id=ticket.id, status=ticket.status, message="Support request submitted")

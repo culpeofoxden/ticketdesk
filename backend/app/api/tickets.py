@@ -5,9 +5,10 @@ from sqlalchemy.orm import Session, joinedload, selectinload
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.models.enums import TicketPriority, TicketStatus, UserRole
-from app.models.ticket import Ticket, TicketComment, TicketHistory
+from app.models.ticket import Ticket, TicketComment, TicketDiagnostic, TicketHistory
 from app.models.user import User
-from app.schemas.ticket import CommentCreate, CommentRead, HistoryRead, TicketCreate, TicketDetail, TicketRead, TicketUpdate
+from app.schemas.ticket import CommentCreate, CommentRead, DiagnosticRead, HistoryRead, TicketCreate, TicketDetail, TicketRead, TicketUpdate
+from app.services.diagnostics import run_ticket_diagnostics
 from app.services.lifecycle import (
     add_history,
     apply_initial_sla,
@@ -72,6 +73,9 @@ def create_ticket(payload: TicketCreate, current_user: User = Depends(get_curren
     db.add(ticket)
     db.flush()
     db.add(add_history(ticket, current_user, "created", None, "ticket", "created", {"source": "app"}))
+    for diagnostic in run_ticket_diagnostics(ticket):
+        db.add(diagnostic)
+    db.add(add_history(ticket, None, "diagnostics", None, "run", "diagnostics_run", {"trigger": "ticket_created"}))
     db.commit()
     return load_ticket_or_404(ticket.id, db)
 
@@ -203,3 +207,31 @@ def get_history(ticket_id: int, current_user: User = Depends(get_current_user), 
     ticket = load_ticket_or_404(ticket_id, db)
     ensure_ticket_access(ticket, current_user)
     return sorted(ticket.history, key=lambda item: item.created_at, reverse=True)
+
+
+@router.get("/{ticket_id}/diagnostics", response_model=list[DiagnosticRead])
+def get_diagnostics(ticket_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[TicketDiagnostic]:
+    ticket = load_ticket_or_404(ticket_id, db)
+    ensure_ticket_access(ticket, current_user)
+    if current_user.role == UserRole.customer:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Diagnostics are available to agents and admins")
+    return list(
+        db.scalars(
+            select(TicketDiagnostic)
+            .where(TicketDiagnostic.ticket_id == ticket.id)
+            .order_by(TicketDiagnostic.checked_at.desc(), TicketDiagnostic.id.desc())
+        )
+    )
+
+
+@router.post("/{ticket_id}/diagnostics/run", response_model=list[DiagnosticRead])
+def rerun_diagnostics(ticket_id: int, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> list[TicketDiagnostic]:
+    if current_user.role not in {UserRole.admin, UserRole.agent}:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Diagnostics are available to agents and admins")
+    ticket = load_ticket_or_404(ticket_id, db)
+    diagnostics = run_ticket_diagnostics(ticket)
+    for diagnostic in diagnostics:
+        db.add(diagnostic)
+    db.add(add_history(ticket, current_user, "diagnostics", None, "run", "diagnostics_run", {"trigger": "manual"}))
+    db.commit()
+    return get_diagnostics(ticket.id, current_user, db)
